@@ -123,7 +123,7 @@
   }
 
   function saveState() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    safeSetItem(STORAGE_KEY, JSON.stringify(state));
     setLastUpdated();
   }
 
@@ -820,19 +820,51 @@
       const current = root.getAttribute('data-theme') === 'dark' ? 'dark' : 'light-or-auto';
       const next = current === 'dark' ? 'light' : 'dark';
       root.setAttribute('data-theme', next);
-      localStorage.setItem(THEME_KEY, next);
+      safeSetItem(THEME_KEY, next);
     });
   }
 
   function applyStoredTheme() {
-    const stored = localStorage.getItem(THEME_KEY);
+    const stored = safeGetItem(THEME_KEY);
     if (stored === 'dark' || stored === 'light') {
       document.documentElement.setAttribute('data-theme', stored);
     }
   }
 
+  function safeGetItem(key) {
+    try {
+      return localStorage.getItem(key);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function safeSetItem(key, value) {
+    try {
+      localStorage.setItem(key, value);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function storageAvailable() {
+    try {
+      const testKey = '__roi_dashboard_test__';
+      localStorage.setItem(testKey, '1');
+      localStorage.removeItem(testKey);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   // ---------- init ----------
 
+  if (!storageAvailable()) {
+    const banner = document.getElementById('storageBanner');
+    if (banner) banner.hidden = false;
+  }
   applyStoredTheme();
   wireEvents();
   setLastUpdated();
