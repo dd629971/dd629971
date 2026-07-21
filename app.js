@@ -366,9 +366,10 @@
       const note = document.createElement('p');
       note.className = 'status-empty';
       note.style.gridColumn = '1 / -1';
-      note.textContent = untargeted > 1
-        ? `${untargeted} metrics still need a target set above to appear on the scorecard.`
-        : '1 metric still needs a target set above to appear on the scorecard.';
+      const metricWord = untargeted > 1 ? 'metrics' : 'metric';
+      note.textContent = READ_ONLY
+        ? `${untargeted} ${metricWord} don't have a target set yet.`
+        : `${untargeted} ${metricWord} still ${untargeted > 1 ? 'need' : 'needs'} a target set above to appear on the scorecard.`;
       board.appendChild(note);
     }
   }
@@ -1123,6 +1124,9 @@
     });
     const importCsvLabel = document.getElementById('importCsvInput')?.closest('label');
     if (importCsvLabel) importCsvLabel.hidden = true;
+
+    const dataHint = document.getElementById('dataSectionHint');
+    if (dataHint) dataHint.textContent = 'One row per reporting period (weekly or monthly).';
 
     const banner = document.getElementById('storageBanner');
     if (banner) banner.hidden = true;
