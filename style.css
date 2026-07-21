@@ -143,6 +143,7 @@ body {
 .btn-ghost { background: transparent; color: var(--text-secondary); }
 .btn-ghost:hover { background: var(--gridline); }
 .btn-danger { color: var(--status-critical); }
+.btn-critical { background: var(--status-critical); color: #fff; border-color: var(--status-critical); }
 .file-btn { display: inline-flex; align-items: center; justify-content: center; }
 
 .kpi-grid {
@@ -315,6 +316,40 @@ body {
   max-width: 220px;
 }
 .tooltip strong { font-size: 13px; }
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(11,11,11,0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 16px;
+}
+.modal-overlay[hidden] { display: none; }
+.modal-box {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  width: 100%;
+  max-width: 360px;
+  box-shadow: 0 12px 32px rgba(0,0,0,.25);
+}
+.modal-title { font-size: 15px; font-weight: 600; margin: 0 0 6px; }
+.modal-message { font-size: 13px; color: var(--text-secondary); margin: 0 0 12px; }
+.modal-input {
+  width: 100%;
+  border: 1px solid var(--border);
+  background: var(--page-plane);
+  color: var(--text-primary);
+  font: inherit;
+  padding: 8px 10px;
+  border-radius: 6px;
+  margin-bottom: 14px;
+}
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
 :focus-visible {
   outline: 2px solid var(--series-1);

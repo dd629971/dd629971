@@ -718,11 +718,74 @@
     });
   }
 
+  // ---------- modal (replaces window.prompt/confirm/alert, which sandboxed embeds can silently disable) ----------
+
+  function openModal({ title, message, showInput = false, inputValue = '', confirmLabel = 'OK', cancelLabel = null, danger = false }) {
+    return new Promise((resolve) => {
+      const overlay = document.getElementById('modalOverlay');
+      const titleEl = document.getElementById('modalTitle');
+      const messageEl = document.getElementById('modalMessage');
+      const inputEl = document.getElementById('modalInput');
+      const actionsEl = document.getElementById('modalActions');
+
+      titleEl.textContent = title || '';
+      messageEl.textContent = message || '';
+      messageEl.hidden = !message;
+      inputEl.hidden = !showInput;
+      inputEl.value = inputValue;
+
+      actionsEl.innerHTML = '';
+
+      function close(result) {
+        overlay.hidden = true;
+        document.removeEventListener('keydown', onKeydown);
+        resolve(result);
+      }
+
+      function onKeydown(e) {
+        if (e.key === 'Escape') close(showInput ? null : false);
+        if (e.key === 'Enter' && showInput) close(inputEl.value.trim() || null);
+      }
+
+      if (cancelLabel) {
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'btn btn-ghost btn-small';
+        cancelBtn.type = 'button';
+        cancelBtn.textContent = cancelLabel;
+        cancelBtn.addEventListener('click', () => close(showInput ? null : false));
+        actionsEl.appendChild(cancelBtn);
+      }
+
+      const confirmBtn = document.createElement('button');
+      confirmBtn.className = danger ? 'btn btn-small btn-critical' : 'btn btn-small';
+      confirmBtn.type = 'button';
+      confirmBtn.textContent = confirmLabel;
+      confirmBtn.addEventListener('click', () => close(showInput ? (inputEl.value.trim() || null) : true));
+      actionsEl.appendChild(confirmBtn);
+
+      overlay.hidden = false;
+      document.addEventListener('keydown', onKeydown);
+      if (showInput) { inputEl.focus(); inputEl.select(); } else { confirmBtn.focus(); }
+    });
+  }
+
+  function showPrompt(title, defaultValue = '') {
+    return openModal({ title, showInput: true, inputValue: defaultValue, confirmLabel: 'Save', cancelLabel: 'Cancel' });
+  }
+
+  function showConfirm(title, message) {
+    return openModal({ title, message, confirmLabel: 'Delete', cancelLabel: 'Cancel', danger: true });
+  }
+
+  function showAlert(title, message) {
+    return openModal({ title, message, confirmLabel: 'OK' });
+  }
+
   // ---------- event wiring ----------
 
   function wireEvents() {
-    document.getElementById('addClientBtn').addEventListener('click', () => {
-      const name = prompt('New client name:');
+    document.getElementById('addClientBtn').addEventListener('click', async () => {
+      const name = await showPrompt('New client name');
       if (!name) return;
       const client = { id: uid(), name: name.trim(), rows: [], targets: {} };
       state.clients.push(client);
@@ -731,22 +794,23 @@
       renderAll();
     });
 
-    document.getElementById('renameClientBtn').addEventListener('click', () => {
+    document.getElementById('renameClientBtn').addEventListener('click', async () => {
       const client = currentClient();
-      const name = prompt('Rename client:', client.name);
+      const name = await showPrompt('Rename client', client.name);
       if (!name) return;
       client.name = name.trim();
       saveState();
       renderAll();
     });
 
-    document.getElementById('deleteClientBtn').addEventListener('click', () => {
+    document.getElementById('deleteClientBtn').addEventListener('click', async () => {
       if (state.clients.length <= 1) {
-        alert('At least one client must remain.');
+        await showAlert('Can’t delete', 'At least one client must remain.');
         return;
       }
       const client = currentClient();
-      if (!confirm(`Delete "${client.name}" and all its data? This cannot be undone.`)) return;
+      const ok = await showConfirm('Delete client', `Delete "${client.name}" and all its data? This cannot be undone.`);
+      if (!ok) return;
       state.clients = state.clients.filter((c) => c.id !== client.id);
       state.selectedClientId = state.clients[0].id;
       saveState();
@@ -782,7 +846,7 @@
       const reader = new FileReader();
       reader.onload = () => {
         const rows = parseCsv(String(reader.result));
-        if (!rows.length) { alert('No rows found in that CSV.'); return; }
+        if (!rows.length) { showAlert('Nothing imported', 'No rows found in that CSV.'); return; }
         currentClient().rows = rows;
         saveState();
         renderAll();
@@ -808,7 +872,7 @@
           saveState();
           renderAll();
         } catch (err) {
-          alert('That file does not look like a valid dashboard backup.');
+          showAlert('Import failed', 'That file does not look like a valid dashboard backup.');
         }
       };
       reader.readAsText(file);
