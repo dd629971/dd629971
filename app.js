@@ -956,9 +956,18 @@
       renderAll();
     });
 
-    document.getElementById('exportCsvBtn').addEventListener('click', () => {
+    document.getElementById('exportCsvBtn').addEventListener('click', async () => {
       const client = currentClient();
-      downloadFile(`${client.name.replace(/[^a-z0-9]+/gi, '-')}-roi-data.csv`, toCsv(client.rows), 'text/csv');
+      const filename = `${client.name.replace(/[^a-z0-9]+/gi, '-')}-roi-data.csv`;
+      const csv = toCsv(client.rows);
+      downloadFile(filename, csv, 'text/csv');
+      await showTextExport({
+        title: 'CSV ready',
+        message: `Your browser should have started downloading "${filename}". If nothing happened, click "Select all" below, copy it, and paste it wherever you need it (including back to me in chat).`,
+        filename,
+        content: csv,
+        mime: 'text/csv',
+      });
     });
 
     document.getElementById('importCsvInput').addEventListener('change', (e) => {
@@ -976,8 +985,17 @@
       e.target.value = '';
     });
 
-    document.getElementById('exportJsonBtn').addEventListener('click', () => {
-      downloadFile('roi-dashboard-backup.json', JSON.stringify(state, null, 2), 'application/json');
+    document.getElementById('exportJsonBtn').addEventListener('click', async () => {
+      const filename = 'roi-dashboard-backup.json';
+      const json = JSON.stringify(state, null, 2);
+      downloadFile(filename, json, 'application/json');
+      await showTextExport({
+        title: 'Backup ready',
+        message: `Your browser should have started downloading "${filename}". If nothing happened, click "Select all" below, copy it, and paste it wherever you need it (including back to me in chat).`,
+        filename,
+        content: json,
+        mime: 'application/json',
+      });
     });
 
     document.getElementById('importJsonInput').addEventListener('change', (e) => {
