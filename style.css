@@ -1,3 +1,9 @@
+/* Author rules setting `display` on a class (e.g. flex/inline-flex utility
+   classes) otherwise beat the `hidden` attribute's UA-stylesheet `display:
+   none` in the cascade, since author styles always outrank UA styles
+   regardless of specificity. This keeps `hidden` authoritative everywhere. */
+[hidden] { display: none !important; }
+
 /* ---- Palette (light default, dark via prefers-color-scheme / data-theme) ---- */
 :root, .viz-root {
   color-scheme: light;
@@ -111,6 +117,8 @@ body {
 .client-list li:hover { background: var(--gridline); }
 .client-list li.is-active { background: var(--series-1); color: #fff; font-weight: 600; }
 .panel-foot { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.share-btn { width: 100%; }
+.share-hint { margin: 6px 0 0; }
 
 .main { padding: 20px 28px 48px; }
 
@@ -302,6 +310,9 @@ body {
 .data-table input[type="text"] { font-variant-numeric: normal; }
 .row-delete { color: var(--text-muted); background: none; border: none; cursor: pointer; font-size: 15px; padding: 4px 6px; }
 .row-delete:hover { color: var(--status-critical); }
+.read-only-cell { display: block; padding: 5px 6px; font-variant-numeric: tabular-nums; }
+
+.layout-readonly { grid-template-columns: 1fr !important; }
 
 .tooltip {
   position: fixed;
@@ -327,7 +338,6 @@ body {
   z-index: 100;
   padding: 16px;
 }
-.modal-overlay[hidden] { display: none; }
 .modal-box {
   background: var(--surface-1);
   border: 1px solid var(--border);

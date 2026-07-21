@@ -1,6 +1,13 @@
 (() => {
   'use strict';
 
+  // Captured before anything renders, so it's the pristine page template --
+  // used to generate a standalone, single-client, read-only file for "Share client view".
+  const PRISTINE_HTML = document.documentElement.outerHTML;
+
+  const EMBED = window.__ROI_DASHBOARD_EMBED__ || null;
+  const READ_ONLY = !!(EMBED && EMBED.readOnly && EMBED.client);
+
   const STORAGE_KEY = 'roi-dashboard/v1';
   const THEME_KEY = 'roi-dashboard/theme';
 
@@ -56,6 +63,9 @@
 
   // ---------- state ----------
 
+  // DEMO-SEED-START -- only reached from loadState()'s fallback, which read-only
+  // client views never call. Stripped out of "Share client view" exports so no
+  // other client's name ever appears, even in view-source.
   function seedClient(name, seedFn, targets) {
     const months = [
       '2025-08', '2025-09', '2025-10', '2025-11', '2025-12',
@@ -103,10 +113,17 @@
       ],
     };
   }
+  // DEMO-SEED-END
 
-  let state = loadState();
-  if (!state.selectedClientId && state.clients.length) {
-    state.selectedClientId = state.clients[0].id;
+  let state;
+  if (READ_ONLY) {
+    if (!EMBED.client.targets) EMBED.client.targets = {};
+    state = { selectedClientId: EMBED.client.id, selectedRange: 'all', clients: [EMBED.client] };
+  } else {
+    state = loadState();
+    if (!state.selectedClientId && state.clients.length) {
+      state.selectedClientId = state.clients[0].id;
+    }
   }
 
   function loadState() {
@@ -123,6 +140,7 @@
   }
 
   function saveState() {
+    if (READ_ONLY) { setLastUpdated(); return; }
     safeSetItem(STORAGE_KEY, JSON.stringify(state));
     setLastUpdated();
   }
@@ -263,6 +281,7 @@
     const client = currentClient();
     const wrap = document.getElementById('targetInputs');
     wrap.innerHTML = '';
+    if (READ_ONLY) { wrap.hidden = true; return; }
 
     METRICS.forEach((metric) => {
       const field = document.createElement('div');
@@ -598,32 +617,43 @@
       const tr = document.createElement('tr');
       FIELD_DEFS.forEach((f) => {
         const td = document.createElement('td');
-        const input = document.createElement('input');
-        input.type = f.type === 'number' ? 'number' : 'text';
-        if (f.type === 'number') input.step = 'any';
-        input.value = row[f.key] ?? (f.type === 'number' ? 0 : '');
-        input.addEventListener('input', () => {
-          row[f.key] = f.type === 'number' ? (parseFloat(input.value) || 0) : input.value;
-          saveState();
-          renderKPIs();
-          renderCharts();
-        });
-        td.appendChild(input);
+        if (READ_ONLY) {
+          const span = document.createElement('span');
+          span.className = 'read-only-cell';
+          const value = row[f.key];
+          span.textContent = f.type === 'number' ? (Number.isFinite(value) ? value.toLocaleString() : '0') : String(value ?? '');
+          td.appendChild(span);
+        } else {
+          const input = document.createElement('input');
+          input.type = f.type === 'number' ? 'number' : 'text';
+          if (f.type === 'number') input.step = 'any';
+          input.value = row[f.key] ?? (f.type === 'number' ? 0 : '');
+          input.addEventListener('input', () => {
+            row[f.key] = f.type === 'number' ? (parseFloat(input.value) || 0) : input.value;
+            saveState();
+            renderKPIs();
+            renderCharts();
+          });
+          td.appendChild(input);
+        }
         tr.appendChild(td);
       });
-      const actionTd = document.createElement('td');
-      const delBtn = document.createElement('button');
-      delBtn.className = 'row-delete';
-      delBtn.type = 'button';
-      delBtn.title = 'Delete period';
-      delBtn.textContent = '✕';
-      delBtn.addEventListener('click', () => {
-        client.rows = client.rows.filter((r) => r.id !== row.id);
-        saveState();
-        renderAll();
-      });
-      actionTd.appendChild(delBtn);
-      tr.appendChild(actionTd);
+
+      if (!READ_ONLY) {
+        const actionTd = document.createElement('td');
+        const delBtn = document.createElement('button');
+        delBtn.className = 'row-delete';
+        delBtn.type = 'button';
+        delBtn.title = 'Delete period';
+        delBtn.textContent = '✕';
+        delBtn.addEventListener('click', () => {
+          client.rows = client.rows.filter((r) => r.id !== row.id);
+          saveState();
+          renderAll();
+        });
+        actionTd.appendChild(delBtn);
+        tr.appendChild(actionTd);
+      }
 
       tbody.appendChild(tr);
     });
@@ -886,6 +916,94 @@
       root.setAttribute('data-theme', next);
       safeSetItem(THEME_KEY, next);
     });
+
+    const shareBtn = document.getElementById('shareClientBtn');
+    if (shareBtn) {
+      shareBtn.addEventListener('click', async () => {
+        shareBtn.disabled = true;
+        const originalLabel = shareBtn.textContent;
+        shareBtn.textContent = 'Building…';
+        try {
+          const client = currentClient();
+          const clientCopy = JSON.parse(JSON.stringify(client));
+          const html = await buildStandaloneClientHtml(clientCopy);
+          downloadFile(`${client.name.replace(/[^a-z0-9]+/gi, '-')}-client-view.html`, html, 'text/html');
+        } catch (e) {
+          showAlert('Couldn’t build client view', 'Something went wrong generating the file. Try again, or check the console for details.');
+          console.error(e);
+        } finally {
+          shareBtn.disabled = false;
+          shareBtn.textContent = originalLabel;
+        }
+      });
+    }
+  }
+
+  // ---------- read-only client view ----------
+
+  async function buildStandaloneClientHtml(client) {
+    let html = PRISTINE_HTML;
+
+    // Every .replace() below uses a replacer FUNCTION, never a plain string --
+    // a string replacement is subject to special $-patterns ($&, $', $1, ...),
+    // and app.js's own source is full of literal "$" (e.g. the target-input
+    // prefix '$'), which would otherwise get misread as one of those patterns
+    // and silently truncate/corrupt the output.
+
+    const linkMatch = html.match(/<link[^>]+rel=["']stylesheet["'][^>]*href=["']([^"']+)["'][^>]*>/i);
+    if (linkMatch) {
+      const cssText = await fetch(linkMatch[1]).then((r) => r.text());
+      html = html.replace(linkMatch[0], () => `<style>\n${cssText}\n</style>`);
+    }
+
+    const scriptMatch = html.match(/<script[^>]+src=["']([^"']+)["'][^>]*><\/script>/i);
+    if (scriptMatch) {
+      const jsText = await fetch(scriptMatch[1]).then((r) => r.text());
+      // Also escaped so this app.js source, once inlined into a real script
+      // element, doesn't hand the HTML parser a literal closing tag mid-string
+      // and truncate the script early -- see the note on embedScript below.
+      html = html.replace(scriptMatch[0], () => `<script>\n${jsText}\n<\/script>`);
+    }
+
+    // Strip the demo-seed block so no other client's name/numbers ship in this file at all.
+    html = html.replace(
+      /\/\/ DEMO-SEED-START[\s\S]*?\/\/ DEMO-SEED-END\n?/,
+      () => '// (demo seed data removed for this client-facing view)\n'
+    );
+
+    html = html.replace(/<title>.*?<\/title>/i, () => `<title>${escapeHtml(client.name)} — ROI Dashboard</title>`);
+
+    // Escaped for the same reason as above: this template lives inside app.js's
+    // own source, which gets inlined into a script element -- an unescaped
+    // closing script tag here would end that element early and corrupt every
+    // file this function ever builds, including itself.
+    const embedScript = `<script>window.__ROI_DASHBOARD_EMBED__ = ${JSON.stringify({ readOnly: true, client })};<\/script>`;
+    html = html.replace('<body>', () => `<body>\n${embedScript}`);
+
+    return html;
+  }
+
+  function applyReadOnlyUI() {
+    const client = currentClient();
+    const panel = document.querySelector('.clients-panel');
+    if (panel) panel.hidden = true;
+    const layout = document.querySelector('.layout');
+    if (layout) layout.classList.add('layout-readonly');
+
+    const h1 = document.querySelector('.topbar h1');
+    if (h1) h1.textContent = `${client.name} — ROI Dashboard`;
+    const tagline = document.querySelector('.tagline');
+    if (tagline) tagline.textContent = 'Updated the moment new numbers come in — not in a quarterly deck.';
+
+    ['addRowBtn'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.hidden = true;
+    });
+    const importCsvLabel = document.getElementById('importCsvInput')?.closest('label');
+    if (importCsvLabel) importCsvLabel.hidden = true;
+
+    const banner = document.getElementById('storageBanner');
+    if (banner) banner.hidden = true;
   }
 
   function applyStoredTheme() {
@@ -925,12 +1043,13 @@
 
   // ---------- init ----------
 
-  if (!storageAvailable()) {
+  if (!READ_ONLY && !storageAvailable()) {
     const banner = document.getElementById('storageBanner');
     if (banner) banner.hidden = false;
   }
   applyStoredTheme();
   wireEvents();
+  if (READ_ONLY) applyReadOnlyUI();
   setLastUpdated();
   renderAll();
 })();

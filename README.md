@@ -33,10 +33,32 @@ client, so it persists across reloads on the same machine/browser.
   pipeline_generated, closed_won_amount, closed_won_count`.
 - **JSON export/import**: full backup of every client's full data set — use
   this to move the dashboard's data to another machine or hand it off.
+- **Target scorecard**: set a per-client, per-metric goal (e.g. "cost per
+  meeting must stay under $650") and see live which metrics are exceeding it,
+  on pace, or slipping — grouped like a scorecard instead of buried in a
+  table.
 
 Two sample clients are pre-loaded with illustrative data so the dashboard
 isn't empty on first load. Delete them (or just add your own clients) once
 you're plugging in real numbers.
+
+## Sharing a client-facing view
+
+Click **Share client view ⤓** in the left panel to download a standalone,
+read-only HTML file containing *only the currently selected client's* data —
+safe to email or host separately, since the other clients' data was never
+included in the file in the first place (not just hidden by a permission
+check). The generated file:
+
+- Has no client switcher, no Add/Rename/Delete, no CSV/JSON import, and no
+  editable inputs anywhere — the underlying data table renders as plain text.
+- Keeps the KPI tiles, target scorecard (read-only), trend charts, range
+  filter, dark mode, and CSV export (so the client can pull their own numbers).
+- Is fully self-contained — it works as a standalone file, no server or
+  network access required, and needs nothing else alongside it.
+
+Regenerate it any time you want the client to see fresher numbers; there's no
+live connection back to your copy of the tool.
 
 ## The four numbers
 
@@ -59,14 +81,13 @@ This is deliberately the cheapest version that's still honest and useful —
 manual/CSV entry, client-side only, single-browser storage. If it proves
 its worth, the natural next steps (in rough order of effort) are:
 
-1. **Move storage server-side** (even a simple database + REST API) so a
-   client-facing view can be shared without exporting/importing JSON files
-   between machines.
+1. **Move storage server-side** (even a simple database + REST API) so the
+   agency and each client see the same continuously-updated data, instead of
+   the agency re-exporting a fresh "Share client view" file by hand whenever
+   numbers change.
 2. **Automate the inputs** by pulling spend from ad platforms (Google/Meta
    Ads APIs) and meetings/opportunities/pipeline/closed-won from the CRM
    (HubSpot, Salesforce, etc.) on a schedule, instead of typing them in.
-3. **Add a read-only client-facing link** so the client can check the number
-   themselves whenever they want, instead of waiting for you to send it.
 
 None of that is required to make the core argument land: the dashboard as
 built already turns "I'm not sure this is working" into a number that has to
