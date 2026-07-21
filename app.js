@@ -753,11 +753,15 @@
   function openModal({ title, message, showInput = false, inputValue = '', confirmLabel = 'OK', cancelLabel = null, danger = false }) {
     return new Promise((resolve) => {
       const overlay = document.getElementById('modalOverlay');
+      const box = document.getElementById('modalBox');
       const titleEl = document.getElementById('modalTitle');
       const messageEl = document.getElementById('modalMessage');
       const inputEl = document.getElementById('modalInput');
+      const textareaEl = document.getElementById('modalTextarea');
       const actionsEl = document.getElementById('modalActions');
 
+      box.classList.remove('is-wide');
+      textareaEl.hidden = true;
       titleEl.textContent = title || '';
       messageEl.textContent = message || '';
       messageEl.hidden = !message;
@@ -809,6 +813,71 @@
 
   function showAlert(title, message) {
     return openModal({ title, message, confirmLabel: 'OK' });
+  }
+
+  // For output the user needs to get OUT of the page (e.g. a generated file).
+  // Some hosts (this Artifact preview included) silently block programmatic
+  // downloads, same as they can block localStorage or native dialogs -- so
+  // this always shows the content in a selectable textarea as a guaranteed
+  // fallback alongside the normal download attempt, rather than assuming the
+  // download worked.
+  function showTextExport({ title, message, filename, content, mime }) {
+    return new Promise((resolve) => {
+      const overlay = document.getElementById('modalOverlay');
+      const box = document.getElementById('modalBox');
+      const titleEl = document.getElementById('modalTitle');
+      const messageEl = document.getElementById('modalMessage');
+      const inputEl = document.getElementById('modalInput');
+      const textareaEl = document.getElementById('modalTextarea');
+      const actionsEl = document.getElementById('modalActions');
+
+      box.classList.add('is-wide');
+      titleEl.textContent = title || '';
+      messageEl.textContent = message || '';
+      messageEl.hidden = !message;
+      inputEl.hidden = true;
+      textareaEl.hidden = false;
+      textareaEl.value = content;
+      actionsEl.innerHTML = '';
+
+      function close() {
+        overlay.hidden = true;
+        box.classList.remove('is-wide');
+        textareaEl.hidden = true;
+        textareaEl.value = '';
+        document.removeEventListener('keydown', onKeydown);
+        resolve();
+      }
+      function onKeydown(e) {
+        if (e.key === 'Escape') close();
+      }
+
+      const downloadBtn = document.createElement('button');
+      downloadBtn.className = 'btn btn-ghost btn-small';
+      downloadBtn.type = 'button';
+      downloadBtn.textContent = 'Download file';
+      downloadBtn.addEventListener('click', () => downloadFile(filename, content, mime));
+      actionsEl.appendChild(downloadBtn);
+
+      const selectBtn = document.createElement('button');
+      selectBtn.className = 'btn btn-small';
+      selectBtn.type = 'button';
+      selectBtn.textContent = 'Select all';
+      selectBtn.addEventListener('click', () => { textareaEl.focus(); textareaEl.select(); });
+      actionsEl.appendChild(selectBtn);
+
+      const closeBtn = document.createElement('button');
+      closeBtn.className = 'btn btn-ghost btn-small';
+      closeBtn.type = 'button';
+      closeBtn.textContent = 'Close';
+      closeBtn.addEventListener('click', close);
+      actionsEl.appendChild(closeBtn);
+
+      overlay.hidden = false;
+      document.addEventListener('keydown', onKeydown);
+      textareaEl.focus();
+      textareaEl.select();
+    });
   }
 
   // ---------- event wiring ----------
@@ -923,18 +992,31 @@
         shareBtn.disabled = true;
         const originalLabel = shareBtn.textContent;
         shareBtn.textContent = 'Building…';
+        let html, filename;
         try {
           const client = currentClient();
           const clientCopy = JSON.parse(JSON.stringify(client));
-          const html = await buildStandaloneClientHtml(clientCopy);
-          downloadFile(`${client.name.replace(/[^a-z0-9]+/gi, '-')}-client-view.html`, html, 'text/html');
+          html = await buildStandaloneClientHtml(clientCopy);
+          filename = `${client.name.replace(/[^a-z0-9]+/gi, '-')}-client-view.html`;
+          downloadFile(filename, html, 'text/html');
         } catch (e) {
           showAlert('Couldn’t build client view', 'Something went wrong generating the file. Try again, or check the console for details.');
           console.error(e);
-        } finally {
           shareBtn.disabled = false;
           shareBtn.textContent = originalLabel;
+          return;
         }
+        // Reset the button before the fallback modal, which can stay open
+        // indefinitely -- it's a courtesy copy, not part of "building".
+        shareBtn.disabled = false;
+        shareBtn.textContent = originalLabel;
+        await showTextExport({
+          title: 'Client view ready',
+          message: `Your browser should have started downloading "${filename}". If nothing happened (some embedded previews block that), click "Select all" below, copy it, and paste it into a new file saved with that name.`,
+          filename,
+          content: html,
+          mime: 'text/html',
+        });
       });
     }
   }
