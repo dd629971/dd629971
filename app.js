@@ -859,6 +859,28 @@
       downloadBtn.addEventListener('click', () => downloadFile(filename, content, mime));
       actionsEl.appendChild(downloadBtn);
 
+      // A different browser permission than downloads -- some hosts that block
+      // one allow the other, so this is a second independent attempt, not a
+      // guaranteed fix. "Select all" (below) is the one guaranteed path: it's
+      // just a DOM selection, nothing a host can permission-gate.
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'btn btn-ghost btn-small';
+        copyBtn.type = 'button';
+        copyBtn.textContent = 'Copy to clipboard';
+        copyBtn.addEventListener('click', async () => {
+          const original = copyBtn.textContent;
+          try {
+            await navigator.clipboard.writeText(content);
+            copyBtn.textContent = 'Copied!';
+          } catch (e) {
+            copyBtn.textContent = 'Couldn’t copy — use Select all';
+          }
+          setTimeout(() => { copyBtn.textContent = original; }, 1800);
+        });
+        actionsEl.appendChild(copyBtn);
+      }
+
       const selectBtn = document.createElement('button');
       selectBtn.className = 'btn btn-small';
       selectBtn.type = 'button';
