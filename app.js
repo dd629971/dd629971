@@ -56,7 +56,7 @@
 
   // ---------- state ----------
 
-  function seedClient(name, seedFn) {
+  function seedClient(name, seedFn, targets) {
     const months = [
       '2025-08', '2025-09', '2025-10', '2025-11', '2025-12',
       '2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06', '2026-07',
@@ -64,6 +64,7 @@
     return {
       id: uid(),
       name,
+      targets,
       rows: months.map((m, i) => ({ id: uid(), period: m, ...seedFn(i) })),
     };
   }
@@ -80,7 +81,12 @@
           pipelineGenerated: 60000 + i * 6000,
           closedWonAmount: 15000 + i * 2200,
           closedWonCount: 2 + (i % 4 === 0 ? 1 : 0),
-        })),
+        }), {
+          costPerMeeting: 650,
+          costPerQualifiedOpp: 1400,
+          costPerPipelineDollar: 0.12,
+          costPerClosedWon: 6000,
+        }),
         seedClient('Sample Client — Northline Retail', (i) => ({
           spend: 8000 + (i % 3) * 400,
           meetings: 10 + (i % 5),
@@ -88,7 +94,12 @@
           pipelineGenerated: 30000 + i * 1500,
           closedWonAmount: 9000 + i * 900,
           closedWonCount: 1 + (i % 3 === 0 ? 1 : 0),
-        })),
+        }), {
+          costPerMeeting: 750,
+          costPerQualifiedOpp: 1800,
+          costPerPipelineDollar: 0.10,
+          costPerClosedWon: 5000,
+        }),
       ],
     };
   }
@@ -121,7 +132,9 @@
   }
 
   function currentClient() {
-    return state.clients.find((c) => c.id === state.selectedClientId) || state.clients[0];
+    const client = state.clients.find((c) => c.id === state.selectedClientId) || state.clients[0];
+    if (client && !client.targets) client.targets = {};
+    return client;
   }
 
   // ---------- formatting ----------
@@ -171,6 +184,10 @@
   }
 
   // ---------- rendering: KPI tiles ----------
+
+  function blendedValue(metric, rows) {
+    return safeDivide(sum(rows, metric.num), sum(rows, metric.den));
+  }
 
   function renderKPIs() {
     const client = currentClient();
@@ -224,6 +241,117 @@
 
       grid.appendChild(tile);
     });
+  }
+
+  // ---------- rendering: target scorecard ----------
+
+  const STATUS_BUCKETS = [
+    { id: 'exceeding', label: 'Exceeding target', dotClass: 'is-good', cardClass: 'is-good' },
+    { id: 'onTarget', label: 'On target', dotClass: '', cardClass: '' },
+    { id: 'below', label: 'Below target', dotClass: 'is-critical', cardClass: 'is-critical' },
+  ];
+
+  function bucketFor(current, target) {
+    if (!Number.isFinite(current) || !target) return null;
+    const ratio = current / target;
+    if (ratio <= 0.95) return 'exceeding';
+    if (ratio > 1.05) return 'below';
+    return 'onTarget';
+  }
+
+  function renderTargetInputs() {
+    const client = currentClient();
+    const wrap = document.getElementById('targetInputs');
+    wrap.innerHTML = '';
+
+    METRICS.forEach((metric) => {
+      const field = document.createElement('div');
+      field.className = 'target-input-field';
+      const label = document.createElement('label');
+      label.textContent = `${metric.label} target`;
+      const inputWrap = document.createElement('div');
+      inputWrap.className = 'input-wrap';
+      const prefix = document.createElement('span');
+      prefix.textContent = '$';
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.step = 'any';
+      input.placeholder = 'not set';
+      input.value = client.targets[metric.id] ?? '';
+      input.addEventListener('input', () => {
+        const v = parseFloat(input.value);
+        if (Number.isFinite(v) && v > 0) {
+          client.targets[metric.id] = v;
+        } else {
+          delete client.targets[metric.id];
+        }
+        saveState();
+        renderStatusBoard();
+      });
+      inputWrap.appendChild(prefix);
+      inputWrap.appendChild(input);
+      field.appendChild(label);
+      field.appendChild(inputWrap);
+      wrap.appendChild(field);
+    });
+  }
+
+  function renderStatusBoard() {
+    const client = currentClient();
+    const board = document.getElementById('statusBoard');
+    board.innerHTML = '';
+    const scoped = rowsInRange(client.rows);
+
+    const withTargets = METRICS.map((metric) => {
+      const current = blendedValue(metric, scoped);
+      const target = client.targets[metric.id];
+      return { metric, current, target, bucket: bucketFor(current, target) };
+    });
+
+    STATUS_BUCKETS.forEach((bucketDef) => {
+      const col = document.createElement('div');
+      col.className = 'status-column';
+      const items = withTargets.filter((m) => m.bucket === bucketDef.id);
+
+      col.innerHTML = `
+        <div class="status-column-head">
+          <span class="status-dot ${escapeHtml(bucketDef.dotClass)}"></span>
+          <span>${escapeHtml(bucketDef.label)}</span>
+          <span class="status-count">${items.length}</span>
+        </div>
+      `;
+
+      if (!items.length) {
+        const empty = document.createElement('p');
+        empty.className = 'status-empty';
+        empty.textContent = 'Nothing here yet.';
+        col.appendChild(empty);
+      } else {
+        items.forEach(({ metric, current, target }) => {
+          const card = document.createElement('div');
+          card.className = `status-card ${bucketDef.cardClass}`;
+          card.innerHTML = `
+            <p class="status-card-label">${escapeHtml(metric.label)}</p>
+            <p class="status-card-value">${formatCurrency(current, metric.currencyDigits ?? 0)}</p>
+            <p class="status-card-target">Target: ${formatCurrency(target, metric.currencyDigits ?? 0)}</p>
+          `;
+          col.appendChild(card);
+        });
+      }
+
+      board.appendChild(col);
+    });
+
+    const untargeted = withTargets.filter((m) => !m.target).length;
+    if (untargeted) {
+      const note = document.createElement('p');
+      note.className = 'status-empty';
+      note.style.gridColumn = '1 / -1';
+      note.textContent = untargeted > 1
+        ? `${untargeted} metrics still need a target set above to appear on the scorecard.`
+        : '1 metric still needs a target set above to appear on the scorecard.';
+      board.appendChild(note);
+    }
   }
 
   function sum(rows, fn) {
@@ -581,6 +709,8 @@
   function renderAll() {
     renderClientList();
     renderKPIs();
+    renderTargetInputs();
+    renderStatusBoard();
     renderCharts();
     renderTable();
     document.querySelectorAll('#rangePresets .chip').forEach((chip) => {
@@ -594,7 +724,7 @@
     document.getElementById('addClientBtn').addEventListener('click', () => {
       const name = prompt('New client name:');
       if (!name) return;
-      const client = { id: uid(), name: name.trim(), rows: [] };
+      const client = { id: uid(), name: name.trim(), rows: [], targets: {} };
       state.clients.push(client);
       state.selectedClientId = client.id;
       saveState();
