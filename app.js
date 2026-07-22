@@ -2,14 +2,18 @@
   'use strict';
 
   // Captured before anything renders, so it's the pristine page template --
-  // used to generate a standalone, single-client, read-only file for "Share client view".
+  // used to generate a standalone, single-client file for "Share client view".
   const PRISTINE_HTML = document.documentElement.outerHTML;
 
   const EMBED = window.__ROI_DASHBOARD_EMBED__ || null;
-  const READ_ONLY = !!(EMBED && EMBED.readOnly && EMBED.client);
+  // A file built for one specific client -- editable or locked, it always
+  // hides the multi-client sidebar, since there's nothing else to switch to.
+  const SINGLE_CLIENT = !!(EMBED && EMBED.client);
+  const READ_ONLY = !!(SINGLE_CLIENT && EMBED.readOnly);
 
   const STORAGE_KEY = 'roi-dashboard/v1';
   const THEME_KEY = 'roi-dashboard/theme';
+  const SINGLE_CLIENT_KEY_PREFIX = 'roi-dashboard/single/';
 
   const METRICS = [
     {
@@ -116,9 +120,22 @@
   // DEMO-SEED-END
 
   let state;
-  if (READ_ONLY) {
+  if (SINGLE_CLIENT) {
     if (!EMBED.client.targets) EMBED.client.targets = {};
-    state = { selectedClientId: EMBED.client.id, selectedRange: 'all', clients: [EMBED.client] };
+    let client = EMBED.client;
+    if (!READ_ONLY) {
+      // Editable single-client links prefer a previously saved edit over the
+      // baked-in starting data, so reloading this same link doesn't wipe out
+      // what was typed in last time (when storage is available at all).
+      const saved = safeGetItem(SINGLE_CLIENT_KEY_PREFIX + EMBED.client.id);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed && Array.isArray(parsed.rows)) client = parsed;
+        } catch (e) { /* corrupt save, fall back to the baked-in client */ }
+      }
+    }
+    state = { selectedClientId: client.id, selectedRange: 'all', clients: [client] };
   } else {
     state = loadState();
     if (!state.selectedClientId && state.clients.length) {
@@ -141,7 +158,11 @@
 
   function saveState() {
     if (READ_ONLY) { setLastUpdated(); return; }
-    safeSetItem(STORAGE_KEY, JSON.stringify(state));
+    if (SINGLE_CLIENT) {
+      safeSetItem(SINGLE_CLIENT_KEY_PREFIX + state.clients[0].id, JSON.stringify(state.clients[0]));
+    } else {
+      safeSetItem(STORAGE_KEY, JSON.stringify(state));
+    }
     setLastUpdated();
   }
 
@@ -1106,7 +1127,10 @@
     return html;
   }
 
-  function applyReadOnlyUI() {
+  // Shared by both single-client modes (editable and read-only): there's only
+  // ever one client in this file, so the multi-client sidebar (which lives in
+  // .clients-panel, wired for Add/Rename/Delete/switch) has nothing to do.
+  function applySingleClientChrome() {
     const client = currentClient();
     const panel = document.querySelector('.clients-panel');
     if (panel) panel.hidden = true;
@@ -1116,8 +1140,16 @@
     const h1 = document.querySelector('.topbar h1');
     if (h1) h1.textContent = `${client.name} — ROI Dashboard`;
     const tagline = document.querySelector('.tagline');
-    if (tagline) tagline.textContent = 'Updated the moment new numbers come in — not in a quarterly deck.';
+    if (tagline) {
+      tagline.textContent = READ_ONLY
+        ? 'Updated the moment new numbers come in — not in a quarterly deck.'
+        : 'Enter this client’s numbers below — every tile and chart recalculates instantly.';
+    }
+  }
 
+  // Read-only-only: strips every editing affordance so a client link can't be
+  // tampered with -- the editable single-client mode skips this entirely.
+  function applyReadOnlyLockdown() {
     ['addRowBtn'].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.hidden = true;
@@ -1175,7 +1207,8 @@
   }
   applyStoredTheme();
   wireEvents();
-  if (READ_ONLY) applyReadOnlyUI();
+  if (SINGLE_CLIENT) applySingleClientChrome();
+  if (READ_ONLY) applyReadOnlyLockdown();
   setLastUpdated();
   renderAll();
 })();
