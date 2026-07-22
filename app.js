@@ -42,6 +42,7 @@
       den: (r) => r.pipelineGenerated,
       lowerIsBetter: true,
       currencyDigits: 2,
+      noTarget: true,
       sub: (spend, pipeline) => {
         if (!spend) return '';
         const roi = pipeline / spend;
@@ -98,7 +99,6 @@
         }), {
           costPerMeeting: 650,
           costPerQualifiedOpp: 1400,
-          costPerPipelineDollar: 0.12,
           costPerClosedWon: 6000,
         }),
         seedClient('Sample Client — Northline Retail', (i) => ({
@@ -111,7 +111,6 @@
         }), {
           costPerMeeting: 750,
           costPerQualifiedOpp: 1800,
-          costPerPipelineDollar: 0.10,
           costPerClosedWon: 5000,
         }),
       ],
@@ -304,7 +303,7 @@
     wrap.innerHTML = '';
     if (READ_ONLY) { wrap.hidden = true; return; }
 
-    METRICS.forEach((metric) => {
+    METRICS.filter((metric) => !metric.noTarget).forEach((metric) => {
       const field = document.createElement('div');
       field.className = 'target-input-field';
       const label = document.createElement('label');
@@ -342,7 +341,7 @@
     board.innerHTML = '';
     const scoped = rowsInRange(client.rows);
 
-    const withTargets = METRICS.map((metric) => {
+    const withTargets = METRICS.filter((metric) => !metric.noTarget).map((metric) => {
       const current = blendedValue(metric, scoped);
       const target = client.targets[metric.id];
       return { metric, current, target, bucket: bucketFor(current, target) };

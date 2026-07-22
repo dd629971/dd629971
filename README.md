@@ -33,10 +33,12 @@ client, so it persists across reloads on the same machine/browser.
   pipeline_generated, closed_won_amount, closed_won_count`.
 - **JSON export/import**: full backup of every client's full data set — use
   this to move the dashboard's data to another machine or hand it off.
-- **Target scorecard**: set a per-client, per-metric goal (e.g. "cost per
-  meeting must stay under $650") and see live which metrics are exceeding it,
-  on pace, or slipping — grouped like a scorecard instead of buried in a
-  table.
+- **Target scorecard**: set a per-client goal for cost per meeting, cost per
+  qualified opportunity, and cost per closed-won deal (e.g. "cost per meeting
+  must stay under $650") and see live which are exceeding it, on pace, or
+  slipping — grouped like a scorecard instead of buried in a table. Cost per
+  $1 of pipeline generated still gets its own KPI tile and trend chart, just
+  no target — it's carried on the scorecard only via the other three.
 
 Two sample clients are pre-loaded with illustrative data so the dashboard
 isn't empty on first load. Delete them (or just add your own clients) once
